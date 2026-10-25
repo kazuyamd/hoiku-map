@@ -167,7 +167,7 @@ input[type=range]{width:100%;accent-color:var(--accent)}
 (function(){
 // 目印（公開）。個人の地点はURLの #p=... にだけ入れて、ページのソースには書かない
 const PUBLIC_MARKS=[
-  {n:'マイスポット',lat:35.449089,lng:139.637985,ic:'⭐️'},
+  {n:'家',lat:35.449089,lng:139.637985,ic:'⭐️'},
   {n:'アスク馬車道保育園',lat:35.448560,lng:139.637648,ic:'🧸'},
   {n:'本町小学校',lat:35.450647,lng:139.628472,ic:'🏫'},
   {n:'関内駅',lat:35.444149,lng:139.635965,ic:'🚉'},
@@ -178,6 +178,7 @@ const PUBLIC_MARKS=[
   {n:'赤レンガ倉庫',lat:35.452632,lng:139.642894,ic:'🧱'}];
 let MY=[];
 try{const m=location.hash.match(/p=([A-Za-z0-9_-]+)/);let raw=null;if(m){raw=m[1];try{localStorage.setItem('hoiku-my',raw)}catch(e){}history.replaceState(null,'',location.pathname+location.search)}else{try{raw=localStorage.getItem('hoiku-my')}catch(e){}}if(raw){const b=raw.replace(/-/g,'+').replace(/_/g,'/');MY=JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(b),c=>c.charCodeAt(0)))).map(x=>({...x,me:true}))}}catch(e){MY=[]}
+MY=MY.map(x=>x.n==='マイスポット'?{...x,n:'家'}:x);
 const near=(a,b)=>Math.abs(a.lat-b.lat)<3e-4&&Math.abs(a.lng-b.lng)<3e-4;
 const MARKS=[...MY,...PUBLIC_MARKS.filter(p=>!MY.some(m=>near(m,p)))];
 const HOME={lat:MARKS[0].lat,lng:MARKS[0].lng}; // 最初の基準地点（個人リンクなら先頭の地点、なければ関内駅）
