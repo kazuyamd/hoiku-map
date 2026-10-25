@@ -168,7 +168,7 @@ const PUBLIC_MARKS=[
   {n:'中華街（善隣門）',lat:35.443072,lng:139.644105,ic:'🏮'},
   {n:'赤レンガ倉庫',lat:35.452632,lng:139.642894,ic:'🧱'}];
 let MY=[];
-try{const m=location.hash.match(/p=([A-Za-z0-9_-]+)/);if(m){const b=m[1].replace(/-/g,'+').replace(/_/g,'/');MY=JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(b),c=>c.charCodeAt(0)))).map(x=>({...x,me:true}))}}catch(e){MY=[]}
+try{const m=location.hash.match(/p=([A-Za-z0-9_-]+)/);let raw=null;if(m){raw=m[1];try{localStorage.setItem('hoiku-my',raw)}catch(e){}history.replaceState(null,'',location.pathname+location.search)}else{try{raw=localStorage.getItem('hoiku-my')}catch(e){}}if(raw){const b=raw.replace(/-/g,'+').replace(/_/g,'/');MY=JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(b),c=>c.charCodeAt(0)))).map(x=>({...x,me:true}))}}catch(e){MY=[]}
 const MARKS=[...MY,...PUBLIC_MARKS];
 const HOME={lat:MARKS[0].lat,lng:MARKS[0].lng}; // 最初の基準地点（個人リンクなら先頭の地点、なければ関内駅）
 const AGES=['0歳','1歳','2歳','3歳','4歳','5歳'];
