@@ -9,13 +9,23 @@ jobs:
   update:
     runs-on: ubuntu-latest
     steps:
+      - name: 今年度（2027年3月1日時点のデータ）までで自動更新を終了
+        id: guard
+        run: |
+          if [ "$(TZ=Asia/Tokyo date +%Y%m%d)" -gt 20270331 ]; then
+            echo "今年度分の自動更新は終了しました"; echo "stop=1" >> "$GITHUB_OUTPUT"
+          fi
       - uses: actions/checkout@v4
+        if: steps.guard.outputs.stop != '1'
       - uses: actions/setup-python@v5
+        if: steps.guard.outputs.stop != '1'
         with:
           python-version: '3.12'
       - name: 最新CSVからdata.jsonを作成
+        if: steps.guard.outputs.stop != '1'
         run: python3 update.py geo.json data.json
       - name: 変更があればコミット
+        if: steps.guard.outputs.stop != '1'
         run: |
           if git diff --quiet data.json; then echo "変更なし"; exit 0; fi
           git config user.name "github-actions[bot]"
