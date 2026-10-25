@@ -53,6 +53,12 @@ input[type=range]{width:100%;accent-color:var(--accent)}
 .toggle{display:flex;gap:8px;align-items:center;cursor:pointer;font-weight:500}
 .toggle input{width:18px;height:18px;accent-color:var(--accent)}
 .btn{font:inherit;font-size:.85rem;font-weight:700;border:1px solid var(--line);background:var(--chip);color:var(--ink);border-radius:999px;padding:6px 12px;cursor:pointer}
+.sel{font:inherit;font-weight:700;font-size:.9rem;padding:7px 10px;border-radius:10px;border:1px solid var(--line);background:var(--panel);color:var(--ink);flex:1;min-width:0}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+.lm{display:grid;place-items:center;width:24px;height:24px;border-radius:7px;background:var(--panel);border:2px solid var(--ink);font-size:13px;line-height:1;box-shadow:0 1px 3px rgba(0,0,0,.3)}
+.lm.me{border-color:#d64545}
+.lm-label{background:var(--panel)!important;color:var(--ink)!important;border:1px solid var(--line)!important;font-weight:700;font-size:11px;padding:1px 5px!important;box-shadow:none!important}
+.lm-label:before{display:none}
 .btn.on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
 .summary{padding-block:12px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:18px;border-bottom:1px solid var(--line);display:flex;gap:18px;align-items:baseline;flex-wrap:wrap}
 .stat{display:flex;align-items:baseline;gap:4px}
@@ -124,8 +130,9 @@ input[type=range]{width:100%;accent-color:var(--accent)}
         <label class="toggle"><input id="hide0" type="checkbox" checked> 受入可能数0の園を隠す</label>
       </div>
       <div class="row">
-        <button class="btn" id="move" type="button">基準地点を地図で選ぶ</button>
-        <button class="btn" id="reset" type="button" hidden>最初の地点に戻す</button>
+        <label class="sr" for="mark">基準地点</label>
+        <select id="mark" class="sel" aria-label="基準地点"></select>
+        <button class="btn" id="move" type="button">地図で選ぶ</button>
       </div>
     </section>
     <section class="summary" aria-live="polite">
@@ -152,11 +159,22 @@ input[type=range]{width:100%;accent-color:var(--accent)}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script>
 (function(){
-const HOME={lat:35.444092,lng:139.636526}; // 最初の基準地点（JR関内駅）
+// 目印（公開）。個人の地点はURLの #p=... にだけ入れて、ページのソースには書かない
+const PUBLIC_MARKS=[
+  {n:'関内駅',lat:35.444149,lng:139.635965,ic:'🚉'},
+  {n:'馬車道駅',lat:35.450177,lng:139.636271,ic:'🚉'},
+  {n:'桜木町駅',lat:35.450914,lng:139.631060,ic:'🚉'},
+  {n:'ランドマークタワー',lat:35.454954,lng:139.631386,ic:'🏙'},
+  {n:'中華街（善隣門）',lat:35.443072,lng:139.644105,ic:'🏮'},
+  {n:'赤レンガ倉庫',lat:35.452632,lng:139.642894,ic:'🧱'}];
+let MY=[];
+try{const m=location.hash.match(/p=([A-Za-z0-9_-]+)/);if(m){const b=m[1].replace(/-/g,'+').replace(/_/g,'/');MY=JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(b),c=>c.charCodeAt(0)))).map(x=>({...x,me:true}))}}catch(e){MY=[]}
+const MARKS=[...MY,...PUBLIC_MARKS];
+const HOME={lat:MARKS[0].lat,lng:MARKS[0].lng}; // 最初の基準地点（個人リンクなら先頭の地点、なければ関内駅）
 const AGES=['0歳','1歳','2歳','3歳','4歳','5歳'];
-const S={age:2,km:2,hide0:true,origin:{...HOME},picking:false};
-try{const s=JSON.parse(localStorage.getItem('hoiku-map')||'{}');if(s.age!=null)S.age=s.age;if(s.km)S.km=s.km;if(s.hide0!=null)S.hide0=s.hide0;if(s.origin)S.origin=s.origin;}catch(e){}
-const save=()=>{try{localStorage.setItem('hoiku-map',JSON.stringify({age:S.age,km:S.km,hide0:S.hide0,origin:S.origin}))}catch(e){}};
+const S={age:2,km:2,hide0:true,origin:{...HOME},mark:0,picking:false};
+try{const s=JSON.parse(localStorage.getItem('hoiku-map')||'{}');if(s.age!=null)S.age=s.age;if(s.km)S.km=s.km;if(s.hide0!=null)S.hide0=s.hide0;if(s.origin&&s.hasMy===!!MY.length){S.origin=s.origin;S.mark=s.mark??-1}}catch(e){}
+const save=()=>{try{localStorage.setItem('hoiku-map',JSON.stringify({age:S.age,km:S.km,hide0:S.hide0,origin:S.origin,mark:S.mark,hasMy:!!MY.length}))}catch(e){}};
 const $=id=>document.getElementById(id);
 let DATA=[];
 
@@ -222,11 +240,16 @@ const km=$('km');km.value=S.km;$('kmv').textContent=(+S.km).toFixed(1)+' km';
 km.addEventListener('input',()=>{S.km=+km.value;$('kmv').textContent=S.km.toFixed(1)+' km';render()});
 km.addEventListener('change',()=>{save();map.fitBounds(circle.getBounds(),{padding:[20,20]})});
 $('hide0').checked=S.hide0;$('hide0').addEventListener('change',e=>{S.hide0=e.target.checked;save();render()});
-const syncReset=()=>{$('reset').hidden=Math.abs(S.origin.lat-HOME.lat)<1e-6&&Math.abs(S.origin.lng-HOME.lng)<1e-6};
-$('move').addEventListener('click',()=>{S.picking=!S.picking;$('move').classList.toggle('on',S.picking);$('move').textContent=S.picking?'選択をやめる':'基準地点を地図で選ぶ';$('hint').hidden=!S.picking;map.getContainer().style.cursor=S.picking?'crosshair':''});
-map.on('click',e=>{if(!S.picking)return;S.origin={lat:e.latlng.lat,lng:e.latlng.lng};$('move').click();syncReset();save();render()});
-$('reset').addEventListener('click',()=>{S.origin={...HOME};syncReset();save();render();map.setView([HOME.lat,HOME.lng],14)});
-syncReset();
+// 目印の選択
+const sel=$('mark');
+function fillSel(){sel.innerHTML=MARKS.map((m,i)=>`<option value="${i}">${m.ic} ${esc(m.n)}</option>`).join('')+'<option value="-1">📍 地図で選んだ地点</option>';sel.value=String(S.mark)}
+fillSel();
+function useMark(i,fly){S.mark=i;if(i>=0){S.origin={lat:MARKS[i].lat,lng:MARKS[i].lng}}sel.value=String(i);save();render();if(fly)map.fitBounds(circle.getBounds(),{padding:[20,20]})}
+sel.addEventListener('change',()=>{const i=+sel.value;if(i===-1){if(!S.picking)$('move').click();return}useMark(i,true)});
+MARKS.forEach((m,i)=>{L.marker([m.lat,m.lng],{icon:L.divIcon({className:'',html:`<div class="lm${m.me?' me':''}">${m.ic}</div>`,iconSize:[24,24],iconAnchor:[12,12]}),zIndexOffset:900,title:m.n})
+  .bindTooltip(m.n,{permanent:true,direction:'right',offset:[12,0],className:'lm-label'}).on('click',()=>{if(!S.picking)useMark(i,true)}).addTo(map)});
+$('move').addEventListener('click',()=>{S.picking=!S.picking;$('move').classList.toggle('on',S.picking);$('move').textContent=S.picking?'やめる':'地図で選ぶ';$('hint').hidden=!S.picking;map.getContainer().style.cursor=S.picking?'crosshair':'';if(!S.picking)sel.value=String(S.mark)});
+map.on('click',e=>{if(!S.picking)return;S.origin={lat:e.latlng.lat,lng:e.latlng.lng};S.mark=-1;$('move').click();sel.value='-1';save();render()});
 
 fetch('data.json').then(r=>r.json()).then(j=>{DATA=j.items;
   $('asof').textContent=j.asof.replace(/[０-９]/g,c=>String.fromCharCode(c.charCodeAt(0)-65248))+'時点のデータ';
