@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>横浜 保育園空きマップ</title>
+<meta name="description" content="横浜市の保育園の受入可能数・入所待ち人数を年齢と距離で絞り込んで地図で見られます。毎月1日時点のデータに自動更新。">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&family=Zen+Maru+Gothic:wght@700;900&display=swap">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>*{box-sizing:border-box}body{margin:0}[hidden]{display:none!important}:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}</style>
+</head>
+<body>
+<style>
+/* Layout: harbor-side tool — control panel on the left, map fills the rest; stacks map-over-list on phones */
+:root{
+  --bg:#f3f5f2; --panel:#ffffff; --ink:#1c2a2e; --muted:#5b6a6e; --line:#dce3df;
+  --accent:#1d6a86; --accent-ink:#ffffff; --chip:#eef3f1;
+  --m-high:#2b8a57; --m-mid:#3a86a8; --m-low:#cf8417; --m-zero:#a3adaf;
+  --shadow:0 1px 2px rgba(20,40,45,.08),0 4px 14px rgba(20,40,45,.08);
+  --f-display:"Zen Maru Gothic","Hiragino Maru Gothic ProN","Yu Gothic",sans-serif;
+  --f-body:"Zen Kaku Gothic New","Hiragino Sans","Yu Gothic","Noto Sans JP",sans-serif;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#11191c; --panel:#172226; --ink:#e4ebe9; --muted:#9db0b3; --line:#2a393e;
+  --accent:#5db2cf; --accent-ink:#0d1a1e; --chip:#1f2d32;
+  --m-high:#3fae74; --m-mid:#4ea2c6; --m-low:#e09a32; --m-zero:#6c7b7f;
+  --shadow:0 1px 2px rgba(0,0,0,.3),0 4px 14px rgba(0,0,0,.3); color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#11191c; --panel:#172226; --ink:#e4ebe9; --muted:#9db0b3; --line:#2a393e;
+  --accent:#5db2cf; --accent-ink:#0d1a1e; --chip:#1f2d32;
+  --m-high:#3fae74; --m-mid:#4ea2c6; --m-low:#e09a32; --m-zero:#6c7b7f;
+  --shadow:0 1px 2px rgba(0,0,0,.3),0 4px 14px rgba(0,0,0,.3); color-scheme:dark}
+html,body{height:100%}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:14px;line-height:1.55}
+.app{display:grid;grid-template-columns:minmax(300px,380px) 1fr;height:100%}
+.panel{display:flex;flex-direction:column;min-width:0;min-height:0;background:var(--panel);border-right:1px solid var(--line)}
+.head{padding-block:18px 14px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:18px;border-bottom:1px solid var(--line);display:grid;gap:4px}
+h1{font-family:var(--f-display);font-weight:900;font-size:1.45rem;letter-spacing:.02em;margin:0;text-wrap:balance}
+.asof{color:var(--muted);font-size:.82rem}
+.asof a{color:var(--accent)}
+.controls{padding-block:14px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:18px;display:grid;gap:14px;border-bottom:1px solid var(--line)}
+.lbl{font-size:.74rem;letter-spacing:.08em;color:var(--muted);font-weight:700;margin-bottom:6px;display:flex;justify-content:space-between;align-items:baseline}
+.lbl b{color:var(--ink);font-size:1rem;letter-spacing:0;font-variant-numeric:tabular-nums}
+.seg{display:grid;grid-template-columns:repeat(6,1fr);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.seg button{font:inherit;font-weight:700;border:0;background:transparent;color:var(--ink);padding:8px 0;cursor:pointer;border-right:1px solid var(--line)}
+.seg button:last-child{border-right:0}
+.seg button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink)}
+.seg button:focus-visible,.btn:focus-visible,.item:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+input[type=range]{width:100%;accent-color:var(--accent)}
+.ticks{display:flex;justify-content:space-between;color:var(--muted);font-size:.72rem;font-variant-numeric:tabular-nums}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.toggle{display:flex;gap:8px;align-items:center;cursor:pointer;font-weight:500}
+.toggle input{width:18px;height:18px;accent-color:var(--accent)}
+.btn{font:inherit;font-size:.85rem;font-weight:700;border:1px solid var(--line);background:var(--chip);color:var(--ink);border-radius:999px;padding:6px 12px;cursor:pointer}
+.btn.on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.summary{padding-block:12px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:18px;border-bottom:1px solid var(--line);display:flex;gap:18px;align-items:baseline;flex-wrap:wrap}
+.stat{display:flex;align-items:baseline;gap:4px}
+.stat .num{font-family:var(--f-display);font-weight:900;font-size:1.7rem;font-variant-numeric:tabular-nums;color:var(--accent)}
+.stat .u{color:var(--muted);font-size:.82rem}
+.list{overflow:auto;min-height:0;flex:1}
+.item{display:grid;grid-template-columns:44px 1fr auto;gap:10px;align-items:center;padding-block:10px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:18px;border-bottom:1px solid var(--line);cursor:pointer;background:transparent;width:100%;text-align:left;font:inherit;color:inherit;border-left:0;border-right:0;border-top:0}
+.item:hover{background:var(--chip)}
+.item .nm{font-weight:700;line-height:1.35;min-width:0}
+.item .sub{color:var(--muted);font-size:.78rem;display:flex;gap:8px;flex-wrap:wrap}
+.item .km{font-variant-numeric:tabular-nums;color:var(--muted);font-size:.8rem;white-space:nowrap}
+.tag{display:inline-block;font-size:.7rem;font-weight:700;padding:0 6px;border-radius:4px;background:var(--chip);color:var(--muted);border:1px solid var(--line)}
+.empty{padding:24px 18px;color:var(--muted)}
+.mapwrap{position:relative;min-width:0;min-height:0}
+#map{position:absolute;inset:0;background:var(--bg)}
+.pp .gl{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+.pp .gl a{flex:1;text-align:center;font-weight:700;font-size:.8rem;text-decoration:none;border-radius:8px;padding:7px 8px;border:1px solid var(--line);background:var(--chip);color:var(--ink)}
+.pp .gl a.pri{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.legend{position:absolute;z-index:500;right:calc(10px + env(safe-area-inset-right,0px));bottom:calc(22px + env(safe-area-inset-bottom,0px));background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:10px;padding:8px 10px;box-shadow:var(--shadow);font-size:.74rem;display:grid;gap:4px}
+.legend .r{display:flex;gap:6px;align-items:center}
+.dot{width:14px;height:14px;border-radius:50%;display:inline-block}
+.hint{position:absolute;z-index:500;left:50%;transform:translateX(-50%);top:12px;background:var(--accent);color:var(--accent-ink);font-weight:700;padding:6px 14px;border-radius:999px;box-shadow:var(--shadow)}
+.loading{position:absolute;z-index:400;inset:0;display:grid;place-items:center;color:var(--muted);pointer-events:none}
+/* markers */
+.mk{display:grid;place-items:center;border-radius:50%;color:#fff;font-weight:900;font-family:var(--f-display);font-variant-numeric:tabular-nums;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.35);line-height:1}
+.mk.small{border-style:dashed}
+.mk.high{background:var(--m-high)} .mk.mid{background:var(--m-mid)} .mk.low{background:var(--m-low)} .mk.zero{background:var(--m-zero);opacity:.9}
+.origin{width:22px;height:22px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);background:#d64545;border:3px solid #fff;box-shadow:0 1px 5px rgba(0,0,0,.4)}
+.leaflet-container{font-family:var(--f-body)}
+.leaflet-popup-content-wrapper,.leaflet-popup-tip{background:var(--panel);color:var(--ink)}
+.leaflet-popup-content{margin:12px 14px;min-width:230px}
+.pp h3{font-family:var(--f-display);font-size:1.02rem;margin:0 0 2px}
+.pp .meta{color:var(--muted);font-size:.78rem;margin-bottom:8px}
+.pp table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums;font-size:.8rem}
+.pp th,.pp td{border:1px solid var(--line);padding:3px 0;text-align:center}
+.pp th{font-weight:500;color:var(--muted);background:var(--chip)}
+.pp td.sel,.pp th.sel{outline:2px solid var(--accent);outline-offset:-2px;font-weight:700}
+.pp .rh{text-align:left;padding-left:6px;color:var(--muted);white-space:nowrap}
+.foot{padding:10px 18px;padding-left:max(16px,env(safe-area-inset-left,0px));color:var(--muted);font-size:.72rem;border-top:1px solid var(--line)}
+@media (max-width:760px){
+  html,body{height:auto}
+  .app{display:flex;flex-direction:column;height:auto}
+  .mapwrap{order:2;height:62svh;min-height:360px;border-block:1px solid var(--line)}
+  .panel{display:contents}
+  .head{order:1;background:var(--panel)} .controls{order:1;background:var(--panel)}
+  .summary{order:3;background:var(--panel)} .list{order:4;overflow:visible;background:var(--panel)} .foot{order:5;background:var(--panel)}
+  .head,.controls,.summary,.item,.foot{padding-right:max(16px,env(safe-area-inset-right,0px))}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+
+<div class="app">
+  <aside class="panel">
+    <header class="head">
+      <h1>横浜 保育園空きマップ</h1>
+      <div class="asof"><span id="asof">読み込み中…</span>・出典 <a href="https://www.city.yokohama.lg.jp/kosodate-kyoiku/hoiku-yoji/shisetsu/riyou/info/nyusho-jokyo.html" target="_blank" rel="noopener">横浜市 保育所等の入所状況</a></div>
+    </header>
+    <section class="controls" aria-label="絞り込み">
+      <div>
+        <div class="lbl">年齢クラス</div>
+        <div class="seg" id="ages" role="group" aria-label="年齢クラス"></div>
+      </div>
+      <div>
+        <div class="lbl"><span>基準地点からの距離</span><b id="kmv">2.0 km</b></div>
+        <input id="km" type="range" min="0.5" max="5" step="0.5" value="2" aria-label="距離">
+        <div class="ticks"><span>0.5</span><span>1</span><span>2</span><span>3</span><span>4</span><span>5 km</span></div>
+      </div>
+      <div class="row">
+        <label class="toggle"><input id="hide0" type="checkbox" checked> 受入可能数0の園を隠す</label>
+      </div>
+      <div class="row">
+        <button class="btn" id="move" type="button">基準地点を地図で選ぶ</button>
+        <button class="btn" id="reset" type="button" hidden>最初の地点に戻す</button>
+      </div>
+    </section>
+    <section class="summary" aria-live="polite">
+      <div class="stat"><span class="num" id="sN">–</span><span class="u">園に空き</span></div>
+      <div class="stat"><span class="num" id="sT">–</span><span class="u">名分</span></div>
+      <div class="stat"><span class="u" id="sAll"></span></div>
+    </section>
+    <div class="list" id="list"></div>
+    <div class="foot">点線の丸は0〜2歳だけの小規模園（3歳で転園が必要）。「待ち」は入所待ち人数。位置は住所から推定しており、数十m程度ずれることがあります。申込前に区役所・各園で最新状況を確認してください。地図：© OpenStreetMap contributors / 国土地理院</div>
+  </aside>
+  <div class="mapwrap">
+    <div id="map" aria-label="地図"></div>
+    <div class="loading" id="loading">地図を読み込み中…</div>
+    <div class="hint" id="hint" hidden>地図をタップして基準地点を決めてください</div>
+    <div class="legend" aria-label="凡例">
+      <div class="r"><span class="dot" style="background:var(--m-high)"></span>空き6名以上</div>
+      <div class="r"><span class="dot" style="background:var(--m-mid)"></span>空き3〜5名</div>
+      <div class="r"><span class="dot" style="background:var(--m-low)"></span>空き1〜2名</div>
+      <div class="r"><span class="dot" style="background:var(--m-zero)"></span>空きなし</div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+(function(){
+const HOME={lat:35.444092,lng:139.636526}; // 最初の基準地点（JR関内駅）
+const AGES=['0歳','1歳','2歳','3歳','4歳','5歳'];
+const S={age:2,km:2,hide0:true,origin:{...HOME},picking:false};
+try{const s=JSON.parse(localStorage.getItem('hoiku-map')||'{}');if(s.age!=null)S.age=s.age;if(s.km)S.km=s.km;if(s.hide0!=null)S.hide0=s.hide0;if(s.origin)S.origin=s.origin;}catch(e){}
+const save=()=>{try{localStorage.setItem('hoiku-map',JSON.stringify({age:S.age,km:S.km,hide0:S.hide0,origin:S.origin}))}catch(e){}};
+const $=id=>document.getElementById(id);
+let DATA=[];
+
+// ---- map with embedded GSI tiles ----
+const map=L.map('map',{zoomControl:true,minZoom:12,maxZoom:19}).setView([S.origin.lat,S.origin.lng],14);
+map.attributionControl.setPrefix(false);
+const base={
+  'OpenStreetMap':L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors'}),
+  '地理院地図':L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png',{maxZoom:18,attribution:'<a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank" rel="noopener">地理院タイル</a>'})};
+base['OpenStreetMap'].addTo(map);L.control.layers(base,null,{position:'topright'}).addTo(map);
+$('loading').hidden=true;
+const originIcon=L.divIcon({className:'',html:'<div class="origin"></div>',iconSize:[22,22],iconAnchor:[11,24]});
+const originMk=L.marker([S.origin.lat,S.origin.lng],{icon:originIcon,zIndexOffset:1000,keyboard:false}).addTo(map).bindTooltip('基準地点',{direction:'top',offset:[0,-22]});
+const circle=L.circle([S.origin.lat,S.origin.lng],{radius:S.km*1000,color:'#1d6a86',weight:1.5,fillOpacity:.05,dashArray:'4 4',interactive:false}).addTo(map);
+const layer=L.layerGroup().addTo(map);
+const markers=new Map();
+
+function dist(a,b){const R=6371,r=Math.PI/180,dl=(b.lat-a.lat)*r,dn=(b.lng-a.lng)*r;const h=Math.sin(dl/2)**2+Math.cos(a.lat*r)*Math.cos(b.lat*r)*Math.sin(dn/2)**2;return 2*R*Math.asin(Math.sqrt(h))}
+const cls=n=>n>=6?'high':n>=3?'mid':n>=1?'low':'zero';
+const small=d=>d.v[3]==null&&d.v[4]==null&&d.v[5]==null;
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const fmt=v=>v==null?'－':v;
+
+function popup(d){
+  const head=AGES.map((a,i)=>`<th class="${i===S.age?'sel':''}">${i}歳</th>`).join('');
+  const rv=d.v.map((v,i)=>`<td class="${i===S.age?'sel':''}">${fmt(v)}</td>`).join('');
+  const rq=d.q.map((v,i)=>`<td class="${i===S.age?'sel':''}">${fmt(v)}</td>`).join('');
+  const tags=[small(d)?'<span class="tag">0〜2歳のみ</span>':'',d.ap?'<span class="tag">位置は概算</span>':''].join(' ');
+  return `<div class="pp"><h3>${esc(d.n)}</h3><div class="meta">${esc(d.w)}・${esc(d.a.replace(/^.*?区/,''))}・基準地点から約${d.d.toFixed(1)}km ${tags}</div>
+  <table><tr><th></th>${head}</tr><tr><td class="rh">空き</td>${rv}</tr><tr><td class="rh">待ち</td>${rq}</tr></table>
+  <div class="gl"><a class="pri" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(d.n+' 横浜市'+d.a)}" target="_blank" rel="noopener">Googleマップで見る</a><a href="https://www.google.com/maps/dir/?api=1&origin=${S.origin.lat},${S.origin.lng}&destination=${d.lat},${d.lng}&travelmode=walking" target="_blank" rel="noopener">基準地点からの経路</a></div></div>`}
+
+function render(){
+  layer.clearLayers();markers.clear();
+  circle.setLatLng([S.origin.lat,S.origin.lng]).setRadius(S.km*1000);originMk.setLatLng([S.origin.lat,S.origin.lng]);
+  const a=S.age;
+  const inR=DATA.map(d=>({...d,d:dist(S.origin,d)})).filter(d=>d.d<=S.km&&d.v[a]!=null);
+  const shown=inR.filter(d=>!S.hide0||d.v[a]>0).sort((x,y)=>(y.v[a]>0)-(x.v[a]>0)||x.d-y.d);
+  const avail=inR.filter(d=>d.v[a]>0);
+  $('sN').textContent=avail.length;$('sT').textContent=avail.reduce((s,d)=>s+d.v[a],0);
+  $('sAll').textContent=`${a}歳児クラスのある園 ${inR.length}園中`;
+  // draw zero first so available sit on top
+  [...shown].sort((x,y)=>x.v[a]-y.v[a]).forEach(d=>{
+    const n=d.v[a],sz=n>0?(n>=6?34:30):20;
+    const icon=L.divIcon({className:'',html:`<div class="mk ${cls(n)}${small(d)?' small':''}" style="width:${sz}px;height:${sz}px;font-size:${n>=10?12:n>0?14:11}px">${n}</div>`,iconSize:[sz,sz],iconAnchor:[sz/2,sz/2],popupAnchor:[0,-sz/2]});
+    const m=L.marker([d.lat,d.lng],{icon,title:d.n,zIndexOffset:n*10}).bindPopup(()=>popup(d),{maxWidth:300});
+    m.addTo(layer);markers.set(d.no,m)});
+  const L_=$('list');
+  if(!shown.length){L_.innerHTML=`<div class="empty">この範囲に${a}歳児の空きがある園はありません。距離を広げるか、基準地点を動かしてください。</div>`;}
+  else L_.innerHTML=shown.map(d=>{const n=d.v[a],q=d.q[a];
+    return `<button class="item" type="button" data-no="${d.no}"><div class="mk ${cls(n)}${small(d)?' small':''}" style="width:34px;height:34px;font-size:15px">${n}</div>
+    <div class="nm">${esc(d.n)}<div class="sub"><span>${esc(d.w)}</span>${q!=null?`<span>待ち ${q}名</span>`:''}${small(d)?'<span class="tag">0〜2歳のみ</span>':''}</div></div>
+    <div class="km">${d.d.toFixed(1)} km</div></button>`}).join('');
+}
+$('list').addEventListener('click',e=>{const b=e.target.closest('.item');if(!b)return;const m=markers.get(b.dataset.no);if(!m)return;
+  if(window.matchMedia('(max-width:760px)').matches)document.querySelector('.mapwrap').scrollIntoView({behavior:'smooth',block:'start'});
+  map.flyTo(m.getLatLng(),Math.max(map.getZoom(),16),{duration:.6});setTimeout(()=>m.openPopup(),650)});
+
+// controls
+$('ages').innerHTML=AGES.map((t,i)=>`<button type="button" data-a="${i}" aria-pressed="${i===S.age}">${t}</button>`).join('');
+$('ages').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;S.age=+b.dataset.a;[...$('ages').children].forEach(x=>x.setAttribute('aria-pressed',x===b));save();render()});
+const km=$('km');km.value=S.km;$('kmv').textContent=(+S.km).toFixed(1)+' km';
+km.addEventListener('input',()=>{S.km=+km.value;$('kmv').textContent=S.km.toFixed(1)+' km';render()});
+km.addEventListener('change',()=>{save();map.fitBounds(circle.getBounds(),{padding:[20,20]})});
+$('hide0').checked=S.hide0;$('hide0').addEventListener('change',e=>{S.hide0=e.target.checked;save();render()});
+const syncReset=()=>{$('reset').hidden=Math.abs(S.origin.lat-HOME.lat)<1e-6&&Math.abs(S.origin.lng-HOME.lng)<1e-6};
+$('move').addEventListener('click',()=>{S.picking=!S.picking;$('move').classList.toggle('on',S.picking);$('move').textContent=S.picking?'選択をやめる':'基準地点を地図で選ぶ';$('hint').hidden=!S.picking;map.getContainer().style.cursor=S.picking?'crosshair':''});
+map.on('click',e=>{if(!S.picking)return;S.origin={lat:e.latlng.lat,lng:e.latlng.lng};$('move').click();syncReset();save();render()});
+$('reset').addEventListener('click',()=>{S.origin={...HOME};syncReset();save();render();map.setView([HOME.lat,HOME.lng],14)});
+syncReset();
+
+fetch('data.json').then(r=>r.json()).then(j=>{DATA=j.items;
+  $('asof').textContent=j.asof.replace(/[０-９]/g,c=>String.fromCharCode(c.charCodeAt(0)-65248))+'時点のデータ';
+  render();map.fitBounds(circle.getBounds(),{padding:[20,20]})})
+ .catch(()=>{$('asof').textContent='データを読み込めませんでした';$('list').innerHTML='<div class="empty">施設データを読み込めませんでした。ページを再読み込みしてください。</div>'});
+})();
+</script>
+</body>
+</html>
